@@ -3,8 +3,16 @@ import { axiosInstance } from "../lib/axios.js";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
 
+// Get backend URL - use full URL in production, relative path in dev
+const getBackendURL = () => {
+  if (import.meta.env.MODE === 'development') {
+    return 'http://localhost:5001';
+  }
+  // In production, use the current origin (same domain)
+  return window.location.origin;
+};
 
-const BASE_URL = import.meta.env.MODE === 'development' ? 'http://localhost:5001' : '/';
+const BASE_URL = getBackendURL();
 
 
 export const useAuthStore = create((set,get) => ({
@@ -95,13 +103,25 @@ logout : async () => {
     connectSocket: () => {
         const { authUser } = get();
         if(!authUser || get().socket?.connected) return;
-        const socket = io(BASE_URL,{
-            query: { userId: authUser._id }
+        
+        const socket = io(BASE_URL, {
+            query: { userId: authUser._id },
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 5,
         });
+        
         socket.connect();
         set({socket : socket});
+        
         socket.on("getOlineUsers", (userIds) => {
             set({onlineUsers : userIds});
+        });
+        
+        socket.on("connect_error", (error) => {
+            console.error("Socket connection error:", error);
         });
     },
     disconnectSocket: () => {
